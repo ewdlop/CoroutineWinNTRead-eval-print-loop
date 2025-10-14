@@ -1,5 +1,69 @@
 CHATGPT: 看起來你是在問：能不能用 `IAsyncEnumerable`（`await foreach`）＋ `switch` 來做一個「訊息迴圈」（message loop），讓風格接近 WinNT/Win32 的 `GetMessage/TranslateMessage/DispatchMessage`？答案是可以，而且在 .NET 裡可用 `System.Threading.Channels` 或任何能提供 `IAsyncEnumerable<T>` 的來源，寫出很像「訊息泵浦」的模式。([Microsoft Learn][1])
 
+## Command Pattern Implementation
+
+This repository demonstrates a Win32-style message loop pattern in C# using `IAsyncEnumerable`, `Channel<T>`, and the **Command Pattern** for extensible message handling.
+
+### Why Command Pattern?
+
+The Command pattern provides several advantages over traditional `switch` statements:
+
+* **Extensibility**: Add new message handlers without modifying existing code
+* **Separation of Concerns**: Each handler is isolated in its own class
+* **Testability**: Individual handlers can be tested independently
+* **Reusability**: Commands can be reused, queued, or logged
+
+### Running the Example
+
+```bash
+dotnet run
+```
+
+Expected output:
+```
+Click at (100,200)
+Key: A
+Tick @ 2025-10-14T05:13:05.7429830Z
+Quit received. Exiting loop.
+```
+
+### Architecture Overview
+
+1. **Messages**: Defined as records implementing `IAppMessage` (Click, Key, Tick, Quit)
+2. **Command Pattern**:
+   - `ICommand`: Interface for all commands with `ExecuteAsync()`
+   - `ICommandHandler<TMessage>`: Generic handler interface for specific message types
+   - `MessageCommand<TMessage>`: Wraps a message and its handler
+3. **Handlers**: Separate classes for each message type (ClickCommandHandler, KeyCommandHandler, etc.)
+4. **Dispatcher**: `CommandDispatcher` maps messages to commands
+5. **Message Pump**: Uses `IAsyncEnumerable` to pull messages from a `Channel`
+
+### Traditional Switch vs Command Pattern
+
+#### Traditional Approach (switch statement):
+```csharp
+switch (msg)
+{
+    case Click(var x, var y):
+        Console.WriteLine($"Click at ({x},{y})");
+        break;
+    case Key(var ch):
+        Console.WriteLine($"Key: {ch}");
+        break;
+    // ... more cases
+}
+```
+
+#### Command Pattern Approach:
+```csharp
+// Each handler is a separate class
+await dispatcher.DispatchAsync(msg);
+```
+
+The dispatcher internally creates the appropriate command and executes it, making the code more maintainable and extensible.
+
+### Original Example (for reference)
+
 下面是一個最小範例：用 `Channel<AppMessage>` 當佇列，生產者把各種訊息丟進去；消費者用 `await foreach` 從 `ReadAllAsync` 拉訊息，並用 `switch`（含型別/屬性樣式比對）分派處理，整體結構就像 Win32 的 `while(GetMessage(&msg)) { TranslateMessage(&msg); DispatchMessage(&msg); }`。
 
 ```csharp
